@@ -758,7 +758,13 @@ function registerUsername() {
 			type: "guest"
 		};
 		if(sipserver !== "") {
-			register["proxy"] = sipserver;
+			// Force TCP transport to work around NAT/UDP blocking issues
+			let proxy = sipserver;
+			if(proxy.indexOf("transport=") < 0) {
+				proxy = proxy.replace(/>$/, "");  // strip trailing > if present
+				proxy = proxy + ";transport=tcp";
+			}
+			register["proxy"] = proxy;
 			// Uncomment this if you want to see an outbound proxy too
 			//~ register["outbound_proxy"] = "sip:outbound.example.com";
 		}
@@ -874,7 +880,12 @@ function registerUsername() {
 				}
 			});
 	} else {
-		register["proxy"] = sipserver;
+		// Force TCP transport to work around NAT/UDP blocking issues
+		let proxy = sipserver;
+		if(proxy.indexOf("transport=") < 0) {
+			proxy = proxy + ";transport=tcp";
+		}
+		register["proxy"] = proxy;
 		// Uncomment this if you want to see an outbound proxy too
 		//~ register["outbound_proxy"] = "sip:outbound.example.com";
 		sipcall.send({ message: register });

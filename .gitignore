@@ -64,6 +64,12 @@ npm/src
 
 cov-int
 
+# Build-time dependency sources (cloned/downloaded during setup, not part of the repo)
+libnice/
+libsrtp-2.2.0/
+libwebsockets/
+v2.2.0.tar.gz
+
 # OS X
 .DS_Store
 

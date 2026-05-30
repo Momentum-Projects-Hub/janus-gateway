@@ -73,11 +73,12 @@ Janus runs on **Linux** (recommended) or **macOS**. Windows is only supported vi
 ### 1.1 Install Dependencies (Ubuntu/Debian)
 
 ```bash
-# Core dependencies
+# Core dependencies (includes cmake for libwebsockets, meson+ninja for libnice)
 sudo apt install -y \
   libmicrohttpd-dev libjansson-dev libssl-dev libsofia-sip-ua-dev \
   libglib2.0-dev libopus-dev libogg-dev libcurl4-openssl-dev \
-  liblua5.3-dev libconfig-dev pkg-config libtool automake
+  liblua5.3-dev libconfig-dev pkg-config libtool automake cmake \
+  meson ninja-build
 
 # Build libnice from source (recommended over distro package)
 git clone https://gitlab.freedesktop.org/libnice/libnice
@@ -94,12 +95,14 @@ make shared_library && sudo make install
 cd ..
 
 # Build libwebsockets (for WebSocket transport)
+# Note: cmake must be installed before this step (included in apt block above)
 git clone https://libwebsockets.org/repo/libwebsockets
 cd libwebsockets
 mkdir build && cd build
 cmake -DLWS_MAX_SMP=1 -DLWS_WITHOUT_EXTENSIONS=0 -DCMAKE_INSTALL_PREFIX:PATH=/usr -DCMAKE_C_FLAGS="-fpic" ..
 make && sudo make install
 cd ../..
+# If cmake fails or you need to retry, remove the build dir first: rm -rf build
 ```
 
 For **Fedora/CentOS:**
