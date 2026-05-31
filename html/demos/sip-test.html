@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>SIP Registration Test</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+  <script src="https://webrtc.github.io/adapter/adapter-latest.js"></script>
+  <script src="janus.js"></script>
+  <style>
+    body { font-family: monospace; background: #0f172a; color: #f8fafc; padding: 2rem; }
+    h2   { color: #6366f1; }
+    .log { background: #1e293b; padding: 1rem; border-radius: 8px; margin-top: 1rem;
+           height: 400px; overflow-y: auto; font-size: 13px; }
+    .ok  { color: #10b981; }
+    .err { color: #ef4444; }
+    .inf { color: #94a3b8; }
+    .warn{ color: #f59e0b; }
+    input { background: #1e293b; color: #f8fafc; border: 1px solid #475569;
+            padding: 6px 10px; border-radius: 4px; width: 300px; margin: 4px 0; }
+    button { background: #6366f1; color: white; border: none; padding: 8px 20px;
+             border-radius: 4px; cursor: pointer; margin: 4px; }
+    button:hover { background: #4f46e5; }
+    button.red { background: #ef4444; }
+    label { display: inline-block; width: 120px; color: #94a3b8; }
+    .status { font-size: 1.2rem; margin: 1rem 0; padding: 0.5rem 1rem;
+              border-radius: 4px; display: inline-block; }
+    .status.idle       { background: #334155; }
+    .status.registering{ background: #92400e; }
+    .status.registered { background: #065f46; color: #10b981; }
+    .status.failed     { background: #7f1d1d; color: #ef4444; }
+  </style>
+</head>
+<body>
+  <h2>SIP Registration Test</h2>
+
+  <div>
+    <label>Janus Server:</label>
+    <input id="janusServer" value="ws://localhost:8188" /><br>
+    <label>SIP Proxy:</label>
+    <input id="sipProxy" value="sip:176.31.149.179" /><br>
+    <label>SIP Username:</label>
+    <input id="sipUser" value="sip:momentum333@sip.linphone.org" /><br>
+    <label>Auth User:</label>
+    <input id="authUser" value="momentum333" /><br>
+    <label>Password:</label>
+    <input id="sipPass" type="password" /><br>
+  </div>
+
+  <br>
+  <div class="status idle" id="status">● Idle</div>
+  <br>
+  <button onclick="startTest()">▶ Register</button>
+  <button class="red" onclick="unregister()">■ Unregister</button>
+  <button onclick="clearLog()">🗑 Clear Log</button>
+
+  <div class="log" id="log"></div>
+
+  <script>
+    let janus = null;
+    let sipcall = null;
+
+    function log(msg, type = "inf") {
+      const d = new Date().toLocaleTimeString();
+      $("#log").append(`<div class="${type}">[${d}] ${msg}</div>`);
+      $("#log").scrollTop($("#log")[0].scrollHeight);
+    }
+
+    function setStatus(text, cls) {
+      $("#status").attr("class", "status " + cls).text("● " + text);
+    }
+
+    function clearLog() { $("#log").empty(); }
+
+    function startTest() {
+      log("Initializing Janus...", "inf");
+      Janus.init({ debug: false, callback: function() {
+        janus = new Janus({
+          server: $("#janusServer").val(),
+          success: function() {
+            log("✓ Connected to Janus", "ok");
+            attachSIP();
+          },
+          error: function(e) {
+            log("✗ Janus connection failed: " + e, "err");
+            setStatus("Janus Error", "failed");
+          }
+        });
+      }});
+    }
+
+    function attachSIP() {
+      log("Attaching to SIP plugin...", "inf");
+      janus.attach({
+        plugin: "janus.plugin.sip",
+        success: function(handle) {
+          sipcall = handle;
+          log("✓ SIP plugin attached", "ok");
+          doRegister();
+        },
+        error: function(e) {
+          log("✗ SIP attach failed: " + e, "err");
+          setStatus("Attach Error", "failed");
+        },
+        onmessage: function(msg, jsep) {
+          let result = msg.result;
+          if (!result) {
+            log("✗ Error: " + JSON.stringify(msg.error), "err");
+            setStatus("Error", "failed");
+            return;
+          }
+          let event = result.event;
+          log("← Event: " + event + (result.code ? " (" + result.code + " " + result.reason + ")" : ""), 
+              event === "registered" ? "ok" : event.includes("fail") ? "err" : "warn");
+
+          if (event === "registering") {
+            setStatus("Registering...", "registering");
+            log("  REGISTER sent to proxy, waiting for 401 challenge + 200 OK...", "inf");
+          } else if (event === "registered") {
+            setStatus("Registered ✓", "registered");
+            log("✓ SIP REGISTRATION SUCCESSFUL", "ok");
+            log("  You can now make/receive calls via sip.html", "ok");
+          } else if (event === "registration_failed") {
+            setStatus("Failed: " + result.code, "failed");
+            log("✗ Registration failed: " + result.code + " " + result.reason, "err");
+            diagnose(result.code);
+          }
+        }
+      });
+    }
+
+    function doRegister() {
+      let proxy = $("#sipProxy").val();
+      let username = $("#sipUser").val();
+      let authuser = $("#authUser").val();
+      let password = $("#sipPass").val();
+
+      log("→ Sending REGISTER to " + proxy, "inf");
+      log("  Username: " + username, "inf");
+      log("  Auth user: " + authuser, "inf");
+
+      sipcall.send({ message: {
+        request: "register",
+        username: username,
+        authuser: authuser,
+        secret: password,
+        proxy: proxy,
+        register_ttl: 3600
+      }});
+    }
+
+    function unregister() {
+      if (!sipcall) { log("Not registered", "warn"); return; }
+      sipcall.send({ message: { request: "unregister" }});
+      log("→ Sent UNREGISTER", "inf");
+      setStatus("Idle", "idle");
+    }
+
+    function diagnose(code) {
+      const hints = {
+        408: "Timeout — server not responding. Check: port forwarding (UDP 5060), firewall, proxy IP.",
+        401: "Unauthorized — wrong password or auth username.",
+        403: "Forbidden — account may be blocked or not activated.",
+        404: "Not found — username doesn't exist on this server.",
+        503: "Service unavailable — transport issue or server down."
+      };
+      if (hints[code]) log("  Hint: " + hints[code], "warn");
+    }
+  </script>
+</body>
+</html>
